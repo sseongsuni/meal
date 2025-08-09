@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>급식 정보</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f7f6;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        input[type="date"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            width: calc(100% - 22px);
+        }
+        #meal-info {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            min-height: 100px;
+            text-align: left;
+            white-space: pre-wrap;
+            background-color: #fafafa;
+            color: #555;
+            line-height: 1.6;
+        }
+        #loading {
+            display: none;
+            margin-top: 10px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>급식 정보 조회</h1>
+        <input type="date" id="date-picker">
+        <div id="meal-info">
+            <p>날짜를 선택해주세요.</p>
+        </div>
+        <div id="loading">불러오는 중...</div>
+    </div>
+
+    <script>
+        // 오늘 날짜로 기본 설정
+        const datePicker = document.getElementById('date-picker');
+        datePicker.value = new Date().toISOString().slice(0, 10);
+
+        const mealInfoDiv = document.getElementById('meal-info');
+        const loadingDiv = document.getElementById('loading');
+
+        // 날짜 선택 시 급식 정보 불러오기
+        datePicker.addEventListener('change', (event) => {
+            const selectedDate = event.target.value.replace(/-/g, '');
+            getMealInfo(selectedDate);
+        });
+
+        // 페이지 로드 시 오늘 날짜의 급식 정보 불러오기
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            getMealInfo(today);
+        });
+
+        function getMealInfo(date) {
+            mealInfoDiv.innerHTML = '';
+            loadingDiv.style.display = 'block';
+
+            // API URL 생성
+            // 주의: 웹 브라우저에서 직접 외부 API를 호출하면 CORS(Cross-Origin Resource Sharing) 오류가 발생할 수 있습니다.
+            // 이를 해결하기 위해 CORS 프록시 서버를 사용해야 할 수 있습니다. (예: https://cors-anywhere.herokuapp.com/)
+            // 여기서는 프록시 없이 직접 호출을 시도합니다. 만약 작동하지 않는다면 프록시 서버 URL을 앞에 추가해야 합니다.
+            // 예: const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+            //     const apiUrl = `${proxyUrl}https://open.neis.go.kr/hub/mealServiceDietInfo?ATPT_OFCDC_SC_CODE=J10&SD_SCHUL_CODE=7661029&MLSV_YMD=${date}`;
+            const apiUrl = `https://open.neis.go.kr/hub/mealServiceDietInfo?ATPT_OFCDC_SC_CODE=J10&SD_SCHUL_CODE=7661029&MLSV_YMD=${date}`;
+
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('네트워크 응답이 올바르지 않습니다.');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    loadingDiv.style.display = 'none';
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(data, "text/xml");
+                    
+                    const resultNode = xmlDoc.getElementsByTagName('RESULT')[0];
+                    if (resultNode) {
+                        const code = resultNode.getElementsByTagName('CODE')[0].textContent;
+                        if (code === 'INFO-200') {
+                            mealInfoDiv.innerHTML = '<p>해당 날짜에 급식 정보가 없습니다.</p>';
+                            return;
+                        }
+                    }
+
+                    const mealRows = xmlDoc.getElementsByTagName('row');
+                    if (mealRows.length > 0) {
+                        let mealHtml = '';
+                        for (let i = 0; i < mealRows.length; i++) {
+                            const mealName = mealRows[i].getElementsByTagName('MMEAL_SC_NM')[0].textContent;
+                            const mealContent = mealRows[i].getElementsByTagName('DDISH_NM')[0].textContent.replace(/<br\s*\/?>/gi, '\n');
+                            mealHtml += `<h3>[${mealName}]</h3><p>${mealContent}</p>`;
+                        }
+                        mealInfoDiv.innerHTML = mealHtml;
+                    } else {
+                        mealInfoDiv.innerHTML = '<p>급식 정보를 불러오는 데 실패했습니다.</p>';
+                    }
+                })
+                .catch(error => {
+                    loadingDiv.style.display = 'none';
+                    mealInfoDiv.innerHTML = `<p>오류가 발생했습니다: ${error.message}</p><p>CORS 정책으로 인해 브라우저에서 직접 API를 호출하지 못할 수 있습니다. 개발자 도구(F12)의 콘솔 창에서 오류를 확인해주세요.</p>`;
+                    console.error('Fetch Error:', error);
+                });
+        }
+    </script>
+
+</body>
+</html>```
